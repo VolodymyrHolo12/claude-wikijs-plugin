@@ -17,7 +17,7 @@ Tools: `wiki_search`, `wiki_get_page`, `wiki_browse` (from the `wikijs` MCP serv
 
 ## Fallback: no token → browser with the user's SSO login
 
-If the `wiki_*` tools are missing or fail with "WIKIJS_URL and WIKIJS_TOKEN env vars must be set" (or HTTP 401/403), use a browser instead. Ask the two questions below **before opening anything**, once per conversation; reuse the answers afterwards.
+If the `wiki_*` tools are missing or fail with "WIKIJS_URL and WIKIJS_TOKEN env vars must be set" (or HTTP 401/403), use a browser instead. Ask the two questions below **before opening anything**, once per conversation. The answers are standing consent for every read-only search and page read on that host for the rest of the conversation: don't ask again before each lookup. Ask again only for a different host, or if the user withdraws it.
 
 **A. Which wiki (`<wiki-url>`)?** Use, in order: a wiki address the user gave in this conversation, else the `WIKIJS_URL` env var (check `echo "$WIKIJS_URL"` in Bash or `$env:WIKIJS_URL` in PowerShell). If neither, don't guess — ask:
 > Which Wiki.js should I search? Send its address in this form: `https://wiki.example.tech`
@@ -34,14 +34,17 @@ Keep only the origin (`https://host`, no path). Accept only `https://` addresses
 Both browsers expose the same `navigate`, `get_page_text` and `javascript_tool` steps below.
 
 1. `navigate` to `<wiki-url>`. If it lands on `/login`, ask the user to sign in (SSO) in that browser themselves, and wait. Never type credentials or click through the login.
-2. Search: run `javascript_tool` with exactly this read-only query, changing only the search terms:
+2. Search **and** read the top pages in one `javascript_tool` call (fewer tool calls = fewer prompts). Use exactly this code, changing only `terms` (and `paths` for step 3):
    ```js
-   const r = await fetch('/graphql', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include',
-     body: JSON.stringify({query:'query($q:String!){pages{search(query:$q){results{id title path locale} totalHits}}}', variables:{q:'<terms>'}})});
-   await r.json()
+   const W = async (query, variables) => { const j = await (await fetch('/graphql', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify({query, variables})})).json(); if (j.errors) throw new Error(j.errors.map(e => e.message).join('; ')); return j.data.pages; };
+   const read = async (path, locale = 'en') => { const p = (await W('query($p:String!,$l:String!){pages{singleByPath(path:$p,locale:$l){title path locale updatedAt content}}}', {p: path, l: locale})).singleByPath; return p && {...p, url: `${location.origin}/${p.locale}/${p.path}`, content: p.content.slice(0, 20000), truncated: p.content.length > 20000}; };
+   const terms = '<terms>', paths = [];   // paths: set instead of terms to read specific pages
+   const s = terms ? (await W('query($q:String!){pages{search(query:$q){results{title path locale} totalHits}}}', {q: terms})).search : {results: [], totalHits: 0};
+   const pages = await Promise.all((paths.length ? paths.map(p => ({path: p})) : s.results.slice(0, 3)).map(r => read(r.path, r.locale)));
+   ({totalHits: s.totalHits, results: s.results.slice(0, 10).map(r => r.path + ' | ' + r.title), pages: pages.filter(Boolean)})
    ```
-   Search result `id`s are search-index ids, not page ids — always open pages by `path`.
-3. Read a page: `navigate` to `<wiki-url>/<locale>/<path>`, then `get_page_text`. To browse, follow links from the page.
+   Always identify pages by `path` (search result ids are search-index ids, not page ids). Content is capped at 20,000 characters per page; if `truncated` is true and the answer may be further down, read the rest with `get_page_text` on its `url`.
+3. More pages: same call with `terms = ''` and `paths = ['a/b', 'c/d']`. To show the user a page, `navigate` to its `url`.
 4. Read-only, enforced by you: the browser session has the user's full wiki rights. Never send a GraphQL `mutation`, and never click Edit, New page, Delete, Move, Save or Post Comment, or type into the comment box.
 
 ## Safety
