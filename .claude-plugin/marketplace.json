@@ -1,0 +1,7 @@
+{
+  "name": "foxway",
+  "owner": { "name": "Volodymyr Holovashchenko" },
+  "plugins": [
+    { "name": "wikijs", "source": "./", "description": "Read-only Wiki.js search and navigation" }
+  ]
+}
