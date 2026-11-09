@@ -17,16 +17,23 @@ Tools: `wiki_search`, `wiki_get_page`, `wiki_browse` (from the `wikijs` MCP serv
 
 ## Fallback: no token → browser with the user's SSO login
 
-If the `wiki_*` tools are missing or fail with "WIKIJS_URL and WIKIJS_TOKEN env vars must be set" (or HTTP 401/403), use a browser instead. The wiki is `https://wiki.foxway.tech` unless `WIKIJS_URL` says otherwise.
+If the `wiki_*` tools are missing or fail with "WIKIJS_URL and WIKIJS_TOKEN env vars must be set" (or HTTP 401/403), use a browser instead. Ask the two questions below **before opening anything**, once per conversation; reuse the answers afterwards.
 
-Which browser, in this order:
-- **Built-in browser** (`mcp__Claude_Browser__*`, desktop app) if available.
-- Otherwise **Claude in Chrome** (`mcp__claude-in-chrome__*`, the user's own Chrome, often already signed in). If its tools are deferred, load them in one `ToolSearch` call: `select:mcp__claude-in-chrome__tabs_context_mcp,mcp__claude-in-chrome__tabs_create_mcp,mcp__claude-in-chrome__navigate,mcp__claude-in-chrome__get_page_text,mcp__claude-in-chrome__javascript_tool`. Call `tabs_context_mcp` first and work in a new tab (`tabs_create_mcp`), not the user's existing tabs.
-- Neither available → tell the user to use the Claude desktop app or install the Claude in Chrome extension, or set a read-only `WIKIJS_TOKEN`.
+**A. Which wiki (`<wiki-url>`)?** Use, in order: a wiki address the user gave in this conversation, else the `WIKIJS_URL` env var (check `echo "$WIKIJS_URL"` in Bash or `$env:WIKIJS_URL` in PowerShell). If neither, don't guess — ask:
+> Which Wiki.js should I search? Send its address in this form: `https://wiki.example.tech`
 
-Both expose the same `navigate`, `get_page_text` and `javascript_tool` steps below.
+Keep only the origin (`https://host`, no path). Accept only `https://` addresses.
 
-1. `navigate` to the wiki. If it lands on `/login`, ask the user to sign in with SSO in the browser pane themselves, and wait. Never type credentials or click through the login.
+**B. Which browser?** Ask, offering only the options whose tools exist in this session:
+> Open `<wiki-url>` in the **built-in browser** or in **your own Chrome** (Claude in Chrome)?
+
+- **Built-in browser:** `mcp__Claude_Browser__*` (Claude desktop app).
+- **Your own Chrome:** `mcp__claude-in-chrome__*`. If its tools are deferred, load them in one `ToolSearch` call: `select:mcp__claude-in-chrome__tabs_context_mcp,mcp__claude-in-chrome__tabs_create_mcp,mcp__claude-in-chrome__navigate,mcp__claude-in-chrome__get_page_text,mcp__claude-in-chrome__javascript_tool`. Call `tabs_context_mcp` first and work in a new tab (`tabs_create_mcp`), never in the user's existing tabs. If it says the extension is not connected, tell the user (install https://chromewebstore.google.com/detail/fcoeoabgfenejglbffodgkkbkcdhcgfn and sign in in its side panel) and offer the built-in browser instead. Don't switch on your own.
+- Neither available → say so; suggest the Claude desktop app, the Claude in Chrome extension, or a read-only `WIKIJS_TOKEN`.
+
+Both browsers expose the same `navigate`, `get_page_text` and `javascript_tool` steps below.
+
+1. `navigate` to `<wiki-url>`. If it lands on `/login`, ask the user to sign in (SSO) in that browser themselves, and wait. Never type credentials or click through the login.
 2. Search: run `javascript_tool` with exactly this read-only query, changing only the search terms:
    ```js
    const r = await fetch('/graphql', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include',
@@ -34,7 +41,7 @@ Both expose the same `navigate`, `get_page_text` and `javascript_tool` steps bel
    await r.json()
    ```
    Search result `id`s are search-index ids, not page ids — always open pages by `path`.
-3. Read a page: `navigate` to `https://wiki.foxway.tech/<locale>/<path>`, then `get_page_text`. To browse, follow links from the page.
+3. Read a page: `navigate` to `<wiki-url>/<locale>/<path>`, then `get_page_text`. To browse, follow links from the page.
 4. Read-only, enforced by you: the browser session has the user's full wiki rights. Never send a GraphQL `mutation`, and never click Edit, New page, Delete, Move, Save or Post Comment, or type into the comment box.
 
 ## Safety
