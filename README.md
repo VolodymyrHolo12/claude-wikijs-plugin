@@ -25,3 +25,25 @@ Ask in any language, e.g. "Is 'Client not linked' on a bid a bug? Check the wiki
 - **With a read-only API key (optional):** set `WIKIJS_URL` and `WIKIJS_TOKEN` env vars (key in a Wiki.js group with only `read:pages`/`read:source`), restart Claude Code. Uses the MCP tools `wiki_search`, `wiki_get_page`, `wiki_browse`.
 
 Self-test: `node test.mjs`.
+
+## Troubleshooting
+
+**"Failed to fetch" on search.** Your browser blocks page scripts from calling the wiki. Claude switches to *no-script mode* by itself: it uses the wiki's own search box and opens each page's source view (`/s/<locale>/<path>`). Same answers, slightly slower. If it doesn't switch, tell it "use no-script mode".
+
+**A confirmation for every action.** Those prompts come from Claude Code's permissions, not from the plugin. Either:
+- in the prompt, pick the option that allows that tool from now on (only for `navigate`, `get_page_text`, `find`), or
+- add this to `~/.claude/settings.json` (merge with what's there):
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "mcp__Claude_Browser__navigate",
+      "mcp__Claude_Browser__get_page_text",
+      "mcp__Claude_Browser__find"
+    ]
+  }
+}
+```
+
+These three only open and read pages. Keep page scripts (`javascript_tool`) and clicking or typing (`computer`) on "ask": they work on any site, not just the wiki.

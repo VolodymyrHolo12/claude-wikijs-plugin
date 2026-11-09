@@ -34,6 +34,8 @@ Keep only the origin (`https://host`, no path). Accept only `https://` addresses
 Both browsers expose the same `navigate`, `get_page_text` and `javascript_tool` steps below.
 
 1. `navigate` to `<wiki-url>` **once per conversation** (only again if the tab was closed or lands on `/login`). If it lands on `/login`, ask the user to sign in (SSO) in that browser themselves, and wait. Never type credentials or click through the login. After that, do everything with `javascript_tool` from that tab: **never `navigate` to individual pages** and don't use `get_page_text` for reading; it's slower and each navigation can trigger a prompt.
+   Before the first script call, check the tab's URL (in the tool's tab context) starts with `<wiki-url>`. After SSO the tab can still be on the identity provider's page; if so, `navigate` to `<wiki-url>` again.
+   **If a script call fails with `Failed to fetch`** (or any network/blocked error) while the tab is on `<wiki-url>`, page scripts can't reach the wiki in this browser. Don't retry it: switch to **No-script mode** (below) for the rest of the conversation and tell the user in one line.
 2. **Search** (one call; usually run 2–3 phrasings in that same call). Compact list only, no page bodies:
    ```js
    const W = async (query, variables) => { const j = await (await fetch('/graphql', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify({query, variables})})).json(); if (j.errors) throw new Error(j.errors.map(e => e.message).join('; ')); return j.data.pages; };
@@ -55,6 +57,12 @@ Both browsers expose the same `navigate`, `get_page_text` and `javascript_tool` 
    ```
    If the answer isn't in `matched`, use the `outline` to pick better keywords (or a heading's words) and read again. Don't fall back to dumping the whole page.
 4. To **show** the user a page, give its `url` as a link; navigate only if they ask you to open it.
+### No-script mode (when page scripts are blocked)
+
+Uses only the wiki's own UI; same answers, a few more browser actions.
+- **Search:** on any wiki page, use the search field in the top bar (`find` "textbox"; on narrow windows it's the magnifier icon in the top bar, so click it first). Type the terms, wait ~2 s, then `find` with the query `/`: each result shows up as its page path (e.g. `products/.../product-picker`) next to its title. For the next search, `triple_click` the same field and type over it. Typing search terms is the only typing allowed.
+- **Read:** `navigate` to the page's **source view** `<wiki-url>/s/<locale>/<path>` (plain markdown, no comments box or edit controls), then `get_page_text`. Read only the 1–3 pages you picked.
+
 5. Read-only, enforced by you: the browser session has the user's full wiki rights. Never send a GraphQL `mutation`, and never click Edit, New page, Delete, Move, Save or Post Comment, or type into the comment box.
 
 ## Safety
