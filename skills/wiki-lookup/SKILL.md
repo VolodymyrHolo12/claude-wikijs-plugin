@@ -15,9 +15,16 @@ Tools: `wiki_search`, `wiki_get_page`, `wiki_browse` (from the `wikijs` MCP serv
 4. If pages disagree or look outdated (check `updatedAt`), say so instead of picking one silently.
 5. If the wiki is silent, say "not documented" — don't fill the gap with guesses. Comparing with the code in the current repo is fine, labelled as such.
 
-## Fallback: no token → built-in browser with the user's SSO login
+## Fallback: no token → browser with the user's SSO login
 
-If the `wiki_*` tools are missing or fail with "WIKIJS_URL and WIKIJS_TOKEN env vars must be set" (or HTTP 401/403), use the built-in browser (`mcp__Claude_Browser__*`) instead. The wiki is `https://wiki.foxway.tech` unless `WIKIJS_URL` says otherwise.
+If the `wiki_*` tools are missing or fail with "WIKIJS_URL and WIKIJS_TOKEN env vars must be set" (or HTTP 401/403), use a browser instead. The wiki is `https://wiki.foxway.tech` unless `WIKIJS_URL` says otherwise.
+
+Which browser, in this order:
+- **Built-in browser** (`mcp__Claude_Browser__*`, desktop app) if available.
+- Otherwise **Claude in Chrome** (`mcp__claude-in-chrome__*`, the user's own Chrome, often already signed in). If its tools are deferred, load them in one `ToolSearch` call: `select:mcp__claude-in-chrome__tabs_context_mcp,mcp__claude-in-chrome__tabs_create_mcp,mcp__claude-in-chrome__navigate,mcp__claude-in-chrome__get_page_text,mcp__claude-in-chrome__javascript_tool`. Call `tabs_context_mcp` first and work in a new tab (`tabs_create_mcp`), not the user's existing tabs.
+- Neither available → tell the user to use the Claude desktop app or install the Claude in Chrome extension, or set a read-only `WIKIJS_TOKEN`.
+
+Both expose the same `navigate`, `get_page_text` and `javascript_tool` steps below.
 
 1. `navigate` to the wiki. If it lands on `/login`, ask the user to sign in with SSO in the browser pane themselves, and wait. Never type credentials or click through the login.
 2. Search: run `javascript_tool` with exactly this read-only query, changing only the search terms:
