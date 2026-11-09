@@ -21,7 +21,7 @@ Ask in any language, e.g. "Is 'Client not linked' on a bid a bug? Check the wiki
 
   Then you sign in with SSO yourself in that browser. You see only what your wiki account can see.
 
-  Claude asks these once per conversation and then searches without asking again; each lookup (search plus reading the top 3 pages) is a single browser call. If the Claude app itself asks you to allow the wiki site or the page script, choose the option that allows it for that site going forward, so you aren't asked on every search.
+  Claude asks these once per conversation and then searches without asking again; the wiki is opened once, then each question takes two quick page-script calls (search, then read only the matching sections of the chosen pages) with no further page loads. If the Claude app itself asks you to allow the wiki site or the page script, choose the option that allows it for that site going forward, so you aren't asked on every search.
 - **With a read-only API key (optional):** set `WIKIJS_URL` and `WIKIJS_TOKEN` env vars (key in a Wiki.js group with only `read:pages`/`read:source`), restart Claude Code. Uses the MCP tools `wiki_search`, `wiki_get_page`, `wiki_browse`.
 
 Self-test: `node test.mjs`.

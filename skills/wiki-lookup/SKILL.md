@@ -33,19 +33,29 @@ Keep only the origin (`https://host`, no path). Accept only `https://` addresses
 
 Both browsers expose the same `navigate`, `get_page_text` and `javascript_tool` steps below.
 
-1. `navigate` to `<wiki-url>`. If it lands on `/login`, ask the user to sign in (SSO) in that browser themselves, and wait. Never type credentials or click through the login.
-2. Search **and** read the top pages in one `javascript_tool` call (fewer tool calls = fewer prompts). Use exactly this code, changing only `terms` (and `paths` for step 3):
+1. `navigate` to `<wiki-url>` **once per conversation** (only again if the tab was closed or lands on `/login`). If it lands on `/login`, ask the user to sign in (SSO) in that browser themselves, and wait. Never type credentials or click through the login. After that, do everything with `javascript_tool` from that tab: **never `navigate` to individual pages** and don't use `get_page_text` for reading; it's slower and each navigation can trigger a prompt.
+2. **Search** (one call; usually run 2–3 phrasings in that same call). Compact list only, no page bodies:
    ```js
    const W = async (query, variables) => { const j = await (await fetch('/graphql', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify({query, variables})})).json(); if (j.errors) throw new Error(j.errors.map(e => e.message).join('; ')); return j.data.pages; };
-   const read = async (path, locale = 'en') => { const p = (await W('query($p:String!,$l:String!){pages{singleByPath(path:$p,locale:$l){title path locale updatedAt content}}}', {p: path, l: locale})).singleByPath; return p && {...p, url: `${location.origin}/${p.locale}/${p.path}`, content: p.content.slice(0, 20000), truncated: p.content.length > 20000}; };
-   const terms = '<terms>', paths = [];   // paths: set instead of terms to read specific pages
-   const s = terms ? (await W('query($q:String!){pages{search(query:$q){results{title path locale} totalHits}}}', {q: terms})).search : {results: [], totalHits: 0};
-   const pages = await Promise.all((paths.length ? paths.map(p => ({path: p})) : s.results.slice(0, 3)).map(r => read(r.path, r.locale)));
-   ({totalHits: s.totalHits, results: s.results.slice(0, 10).map(r => r.path + ' | ' + r.title), pages: pages.filter(Boolean)})
+   const S = async q => { const s = (await W('query($q:String!){pages{search(query:$q){results{title path locale description} totalHits suggestions}}}', {q})).search; return {totalHits: s.totalHits, suggestions: s.suggestions, results: s.results.slice(0, 12).map(r => `${r.locale}/${r.path} | ${r.title}${r.description ? ' — ' + r.description : ''}`)}; };
+   const queries = ['<terms 1>', '<terms 2>'];
+   Object.fromEntries(await Promise.all(queries.map(async q => [q, await S(q)])))
    ```
-   Always identify pages by `path` (search result ids are search-index ids, not page ids). Content is capped at 20,000 characters per page; if `truncated` is true and the answer may be further down, read the rest with `get_page_text` on its `url`.
-3. More pages: same call with `terms = ''` and `paths = ['a/b', 'c/d']`. To show the user a page, `navigate` to its `url`.
-4. Read-only, enforced by you: the browser session has the user's full wiki rights. Never send a GraphQL `mutation`, and never click Edit, New page, Delete, Move, Save or Post Comment, or type into the comment box.
+   Search ranking is loose: **pick pages by path and title yourself**, not by rank. Pages that show up for several phrasings, or whose path names the system in question, are usually the right ones.
+3. **Read** the 1–3 chosen pages (one call). It returns the outline plus only the sections that match your keywords, so long pages stay small:
+   ```js
+   const W = async (query, variables) => { const j = await (await fetch('/graphql', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify({query, variables})})).json(); if (j.errors) throw new Error(j.errors.map(e => e.message).join('; ')); return j.data.pages; };
+   const paths = ['en/<path>'], kw = /<word1>|<word2>/i;   // kw: 2–5 words from the question, incl. synonyms
+   await Promise.all(paths.map(async lp => { const [l, ...rest] = lp.split('/'); const p = (await W('query($p:String!,$l:String!){pages{singleByPath(path:$p,locale:$l){title updatedAt content}}}', {p: rest.join('/'), l})).singleByPath;
+     if (!p) return {path: lp, error: 'not found'};
+     const url = `${location.origin}/${lp}`, c = p.content;
+     if (c.length <= 8000) return {url, title: p.title, updatedAt: p.updatedAt, content: c};
+     const secs = c.split(/\n(?=#{1,4} )/), hit = secs.filter(s => kw.test(s));
+     return {url, title: p.title, updatedAt: p.updatedAt, outline: secs.map(s => s.split('\n')[0]).filter(h => /^#/.test(h)), matched: hit.join('\n\n').slice(0, 12000), matchedSections: hit.length, totalSections: secs.length}; }))
+   ```
+   If the answer isn't in `matched`, use the `outline` to pick better keywords (or a heading's words) and read again. Don't fall back to dumping the whole page.
+4. To **show** the user a page, give its `url` as a link; navigate only if they ask you to open it.
+5. Read-only, enforced by you: the browser session has the user's full wiki rights. Never send a GraphQL `mutation`, and never click Edit, New page, Delete, Move, Save or Post Comment, or type into the comment box.
 
 ## Safety
 
