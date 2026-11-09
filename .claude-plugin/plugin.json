@@ -1,6 +1,6 @@
 {
   "name": "wikijs",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Read-only search and navigation of the corporate Wiki.js (bugs, expected behavior, docs).",
   "author": { "name": "Volodymyr Holovashchenko" }
 }

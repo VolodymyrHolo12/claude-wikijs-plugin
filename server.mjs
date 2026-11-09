@@ -92,7 +92,7 @@ async function handle(msg) {
   try {
     let result;
     if (method === 'initialize')
-      result = { protocolVersion: params?.protocolVersion ?? '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'wikijs-readonly', version: '0.1.0' } };
+      result = { protocolVersion: params?.protocolVersion ?? '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'wikijs-readonly', version: '0.2.0' } };
     else if (method === 'ping') result = {};
     else if (method === 'tools/list') result = { tools: TOOLS.map(({ run, ...t }) => ({ ...t, annotations: { readOnlyHint: true } })) };
     else if (method === 'tools/call') {

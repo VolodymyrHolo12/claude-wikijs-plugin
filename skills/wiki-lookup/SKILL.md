@@ -43,19 +43,23 @@ Both browsers expose the same `navigate`, `get_page_text` and `javascript_tool` 
    const queries = ['<terms 1>', '<terms 2>'];
    Object.fromEntries(await Promise.all(queries.map(async q => [q, await S(q)])))
    ```
+   **Search in the wiki's language (English), even if the user asked in another language**: translate the key terms, and use the words shown in the UI or screenshot (e.g. "Client not linked", "product picker"). Answer in the user's language.
    Search ranking is loose: **pick pages by path and title yourself**, not by rank. Pages that show up for several phrasings, or whose path names the system in question, are usually the right ones.
-3. **Read** the 1–3 chosen pages (one call). It returns the outline plus only the sections that match your keywords, so long pages stay small:
+3. **Read** the 1–3 chosen pages (one call). Pages up to 30,000 characters (most pages) come back **in full**. Longer ones come back as an outline plus the sections matching `kw`, or the sections whose headings you list in `want`:
    ```js
    const W = async (query, variables) => { const j = await (await fetch('/graphql', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify({query, variables})})).json(); if (j.errors) throw new Error(j.errors.map(e => e.message).join('; ')); return j.data.pages; };
-   const paths = ['en/<path>'], kw = /<word1>|<word2>/i;   // kw: 2–5 words from the question, incl. synonyms
+   const paths = ['en/<path>'], kw = /<word1>|<word2>/i, want = [];   // kw: English words + synonyms; want: heading texts to read in full
    await Promise.all(paths.map(async lp => { const [l, ...rest] = lp.split('/'); const p = (await W('query($p:String!,$l:String!){pages{singleByPath(path:$p,locale:$l){title updatedAt content}}}', {p: rest.join('/'), l})).singleByPath;
      if (!p) return {path: lp, error: 'not found'};
      const url = `${location.origin}/${lp}`, c = p.content;
-     if (c.length <= 8000) return {url, title: p.title, updatedAt: p.updatedAt, content: c};
-     const secs = c.split(/\n(?=#{1,4} )/), hit = secs.filter(s => kw.test(s));
-     return {url, title: p.title, updatedAt: p.updatedAt, outline: secs.map(s => s.split('\n')[0]).filter(h => /^#/.test(h)), matched: hit.join('\n\n').slice(0, 12000), matchedSections: hit.length, totalSections: secs.length}; }))
+     if (c.length <= 30000 && !want.length) return {url, title: p.title, updatedAt: p.updatedAt, content: c};
+     const secs = c.split(/\n(?=#{1,4} )/), head = s => s.split('\n')[0];
+     const pick = want.length ? secs.filter(s => want.some(w => head(s).toLowerCase().includes(w.toLowerCase()))) : secs.filter(s => kw.test(s));
+     return {url, title: p.title, updatedAt: p.updatedAt, length: c.length, outline: secs.map(head).filter(h => /^#/.test(h)).slice(0, 150), sections: pick.map(s => s.slice(0, 6000)).join('\n\n').slice(0, 20000), matchedSections: pick.length}; }))
    ```
-   If the answer isn't in `matched`, use the `outline` to pick better keywords (or a heading's words) and read again. Don't fall back to dumping the whole page.
+   On a long page, if `sections` is empty or misses the answer, pick the likely headings from `outline` and read again with `want = ['<heading text>', ...]`. Never conclude "not documented" from an empty keyword match.
+
+   **Before answering "not documented"**, you must have: searched with at least 2 English phrasings, and read the best 1–2 candidate pages (in full, or the relevant headings via `want`).
 4. To **show** the user a page, give its `url` as a link; navigate only if they ask you to open it.
 ### No-script mode (when page scripts are blocked)
 
